@@ -151,8 +151,8 @@ const PORT = process.env.PORT || 3000;
 
 // SSL configuration
 const sslOptions = {
-  key: fs.readFileSync(path.join(__dirname, '../certificates/private.key')),
-  cert: fs.readFileSync(path.join(__dirname, '../certificates/certificate.crt'))
+  key: fs.readFileSync(path.join(__dirname, '../certificates/key.pem')),
+  cert: fs.readFileSync(path.join(__dirname, '../certificates/cert.pem'))
 };
 
 // Create HTTPS server
