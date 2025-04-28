@@ -90,10 +90,55 @@ try {
     }
 }
 
+# Setup MySQL Database and User
+if ($mysqlInstalled) {
+    Write-Host "`nSetting up MySQL database and user..." -ForegroundColor Cyan
+    $mysqlRootPassword = Read-Host "Enter MySQL root password" -AsSecureString
+    $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($mysqlRootPassword)
+    $plainPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+    
+    $mysqlCommands = @"
+CREATE DATABASE IF NOT EXISTS vendr;
+CREATE USER IF NOT EXISTS 'vendruser'@'localhost' IDENTIFIED BY 'vendr';
+CREATE USER IF NOT EXISTS 'vendruser'@'127.0.0.1' IDENTIFIED BY 'vendr';
+
+-- Update authentication method for MySQL 8+ compatibility
+ALTER USER 'vendruser'@'localhost' IDENTIFIED WITH mysql_native_password BY 'vendr';
+ALTER USER 'vendruser'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY 'vendr';
+
+-- Grant necessary privileges
+GRANT ALL PRIVILEGES ON vendr.* TO 'vendruser'@'localhost';
+GRANT ALL PRIVILEGES ON vendr.* TO 'vendruser'@'127.0.0.1';
+
+-- Grant permissions needed for Prisma shadow database
+GRANT CREATE, ALTER, DROP, REFERENCES ON *.* TO 'vendruser'@'localhost';
+GRANT CREATE, ALTER, DROP, REFERENCES ON *.* TO 'vendruser'@'127.0.0.1';
+
+FLUSH PRIVILEGES;
+"@
+    
+    $mysqlCommands | Out-File -FilePath "mysql_setup.sql" -Encoding UTF8
+    
+    try {
+        # Use cmd.exe to execute the MySQL command with redirection
+        cmd.exe /c "mysql -u root -p$plainPassword < mysql_setup.sql"
+        Write-Host "MySQL database and user setup completed successfully" -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to setup MySQL database and user. Please check your MySQL credentials." -ForegroundColor Red
+        $continueAnyway = Read-Host "Continue anyway? (y/n)"
+        if ($continueAnyway -ne "y") {
+            exit 1
+        }
+    }
+    
+    # Clean up
+    Remove-Item -Path "mysql_setup.sql" -Force
+}
+
 # Create .env file for backend
 $backendEnv = @"
 # Database Configuration
-DATABASE_URL="mysql://root:123@localhost:3306/vendr"
+DATABASE_URL="mysql://vendruser:vendr@localhost:3306/vendr"
 
 # Authentication
 JWT_SECRET="bj9XzE2KLp8n5fTVAuC7ymRHGd3qP6ZwDsQ4vWxMcJ"
@@ -136,6 +181,9 @@ if (-not (Test-Path ".env")) {
 # Install backend dependencies
 Write-Host "Installing backend dependencies..." -ForegroundColor Cyan
 npm install
+# Install mysql2 for database connection tests
+npm install mysql2 --save
+
 # Install npm packages with @ symbols correctly
 npm install multer@1.4.5-lts.1 bcrypt@5.1.1 compression@1.8.0 cookie-parser@1.4.7 cors@2.8.5 csurf@1.10.0 dotenv@16.4.5 express@4.18.3 express-rate-limit@7.5.0 firebase-admin@13.2.0 helmet@8.1.0 https@1.0.0 ioredis@5.6.0 jsonwebtoken@9.0.2 morgan@1.10.0 mysql2@3.9.2 nodemailer@6.10.0 prisma@5.10.2 rate-limit-redis@4.2.0 react-otp-input@3.1.1 sequelize@6.37.7 sequelize-typescript@2.1.6 socket.io@4.8.1 twilio@5.5.2 uuid@11.1.0 --save
 npm install --save "@prisma/client@5.10.2"
@@ -163,13 +211,56 @@ Write-Host "Note: If you experience permission issues with node_modules binaries
 Write-Host "icacls node_modules\.bin\* /grant Everyone:F" -ForegroundColor Cyan
 Write-Host "Or run the application as administrator" -ForegroundColor Cyan
 
+# Verify MySQL Connection
+Write-Host "Verifying MySQL connection..." -ForegroundColor Cyan
+$testDbJs = @"
+const mysql = require('mysql2/promise');
+
+async function testConnection() {
+  try {
+    const connection = await mysql.createConnection({
+      host: 'localhost',
+      user: 'vendruser',
+      password: 'vendr',
+      database: 'vendr'
+    });
+    console.log('Connected to MySQL successfully!');
+    await connection.execute('SELECT 1');
+    console.log('Query executed successfully!');
+    await connection.end();
+    return true;
+  } catch (error) {
+    console.error('Error connecting to MySQL:', error);
+    return false;
+  }
+}
+
+testConnection().then(success => {
+  if (!success) {
+    console.error('MySQL connection failed. Please check your MySQL setup.');
+    process.exit(1);
+  }
+});
+"@
+
+$testDbJs | Out-File -FilePath "test-db.js" -Encoding UTF8
+node test-db.js
+if (-not $?) {
+    Write-Host "MySQL connection test failed. Please check your MySQL setup." -ForegroundColor Red
+    $continueAnyway = Read-Host "Continue anyway? (y/n)"
+    if ($continueAnyway -ne "y") {
+        exit 1
+    }
+}
+Remove-Item -Path "test-db.js" -Force
+
 # Setup Prisma
 Write-Host "Setting up Prisma ORM..." -ForegroundColor Cyan
 npx prisma generate
 
 # Run Prisma migrations if they exist
 Write-Host "Running Prisma migrations..." -ForegroundColor Cyan
-npx prisma migrate deploy 
+npx prisma migrate dev --name init_database
 if (-not $?) {
     Write-Host "No migrations to run or database not accessible." -ForegroundColor Yellow
 }
@@ -223,6 +314,11 @@ if (-not (Test-Path "certificates")) {
     if ($openSSLAvailable) {
         Write-Host "Generating self-signed SSL certificates using OpenSSL..." -ForegroundColor Cyan
         openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout certificates\key.pem -out certificates\cert.pem -subj "/CN=localhost" 2>$null
+        
+        # Create copies with the expected filenames for src/index.ts
+        Copy-Item -Path "certificates\key.pem" -Destination "certificates\private.key" -Force
+        Copy-Item -Path "certificates\cert.pem" -Destination "certificates\certificate.crt" -Force
+        
         Write-Host "Generated SSL certificates" -ForegroundColor Green
     } else {
         Write-Host "OpenSSL not found. Using npm module mkcert to generate certificates..." -ForegroundColor Yellow
@@ -232,6 +328,11 @@ if (-not (Test-Path "certificates")) {
         if (Test-Path "localhost.crt" -and Test-Path "localhost.key") {
             Move-Item -Path "localhost.key" -Destination "certificates\key.pem" -Force
             Move-Item -Path "localhost.crt" -Destination "certificates\cert.pem" -Force
+            
+            # Create copies with the expected filenames for src/index.ts
+            Copy-Item -Path "certificates\key.pem" -Destination "certificates\private.key" -Force
+            Copy-Item -Path "certificates\cert.pem" -Destination "certificates\certificate.crt" -Force
+            
             Write-Host "Generated SSL certificates" -ForegroundColor Green
         } else {
             Write-Host "Failed to generate SSL certificates. HTTPS might not work properly." -ForegroundColor Yellow
@@ -239,6 +340,14 @@ if (-not (Test-Path "certificates")) {
     }
 } else {
     Write-Host "SSL certificates directory already exists" -ForegroundColor Green
+    
+    # Ensure the certificate files exist with the expected names for src/index.ts
+    if ((Test-Path "certificates\key.pem") -and (Test-Path "certificates\cert.pem") -and 
+        ((-not (Test-Path "certificates\private.key")) -or (-not (Test-Path "certificates\certificate.crt")))) {
+        Copy-Item -Path "certificates\key.pem" -Destination "certificates\private.key" -Force
+        Copy-Item -Path "certificates\cert.pem" -Destination "certificates\certificate.crt" -Force
+        Write-Host "Created certificate copies with expected filenames" -ForegroundColor Green
+    }
 }
 
 # Setup Frontend
@@ -332,18 +441,25 @@ Write-Host "Vendr setup completed successfully!" -ForegroundColor Green
 Write-Host "====================================================" -ForegroundColor Green
 Write-Host "Before running the application:" -ForegroundColor Yellow
 Write-Host "1. Make sure MySQL server is running" -ForegroundColor Yellow
-Write-Host "2. Create a database named 'vendr' if it doesn't exist:" -ForegroundColor Yellow
-Write-Host "   mysql -u root -p -e 'CREATE DATABASE IF NOT EXISTS vendr;'" -ForegroundColor Cyan
-Write-Host "3. Run the database migrations: cd backend && npx prisma migrate dev" -ForegroundColor Yellow
+
 Write-Host "`nTo start the application:" -ForegroundColor Yellow
 Write-Host "1. Start backend: cd backend && npm run dev" -ForegroundColor Yellow
 Write-Host "2. Start frontend: cd frontend && npm run dev" -ForegroundColor Yellow
 Write-Host "3. Or use the start-servers.bat script in the server_scripts directory" -ForegroundColor Yellow
 
 Write-Host "`nTroubleshooting:" -ForegroundColor Yellow
-Write-Host "If you experience permission issues with node_modules binaries, try the following:" -ForegroundColor Yellow
-Write-Host "1. Run the following commands to grant full permissions:" -ForegroundColor Yellow
+Write-Host "1. If you experience permission issues with node_modules binaries, try the following:" -ForegroundColor Yellow
 Write-Host "   cd backend && icacls node_modules\.bin\* /grant Everyone:F" -ForegroundColor Cyan
 Write-Host "   cd frontend && icacls node_modules\.bin\* /grant Everyone:F" -ForegroundColor Cyan
-Write-Host "2. Run PowerShell or Command Prompt as Administrator" -ForegroundColor Yellow
-Write-Host "3. Try running the application with administrator privileges" -ForegroundColor Yellow
+Write-Host "2. If you have MySQL connection issues, ensure the MySQL user is properly configured:" -ForegroundColor Yellow
+Write-Host "   MySQL 8+ requires the use of 'mysql_native_password' authentication for Prisma:" -ForegroundColor Yellow
+Write-Host "   mysql -u root -p" -ForegroundColor Cyan
+Write-Host "   ALTER USER 'vendruser'@'localhost' IDENTIFIED WITH mysql_native_password BY 'vendr';" -ForegroundColor Cyan
+Write-Host "   GRANT ALL PRIVILEGES ON vendr.* TO 'vendruser'@'localhost';" -ForegroundColor Cyan
+Write-Host "   GRANT CREATE, ALTER, DROP, REFERENCES ON *.* TO 'vendruser'@'localhost';" -ForegroundColor Cyan
+Write-Host "   FLUSH PRIVILEGES;" -ForegroundColor Cyan
+Write-Host "3. If your backend hangs at server startup, check the certificate file names:" -ForegroundColor Yellow
+Write-Host "   cd backend\certificates" -ForegroundColor Cyan
+Write-Host "   dir" -ForegroundColor Cyan
+Write-Host "   # Ensure both private.key and certificate.crt exist" -ForegroundColor Cyan
+Write-Host "4. Make sure to run MySQL service as administrator" -ForegroundColor Yellow

@@ -64,9 +64,25 @@ else
     echo -e "\033[0;32mMySQL is installed\033[0m"
 fi
 
+# Find MySQL socket path
+MYSQL_SOCKET_PATH="/var/run/mysqld/mysqld.sock"
+if [ -e "/var/run/mysqld/mysqld.sock" ]; then
+    MYSQL_SOCKET_PATH="/var/run/mysqld/mysqld.sock"
+elif [ -e "/tmp/mysql.sock" ]; then
+    MYSQL_SOCKET_PATH="/tmp/mysql.sock"
+else
+    # Try to find the socket path
+    SOCKET_PATH=$(sudo mysqladmin variables 2>/dev/null | grep "socket" | awk '{print $4}')
+    if [ ! -z "$SOCKET_PATH" ]; then
+        MYSQL_SOCKET_PATH=$SOCKET_PATH
+    fi
+fi
+
+echo -e "\033[0;32mMySQL socket path: $MYSQL_SOCKET_PATH\033[0m"
+
 # Create .env file for backend if it doesn't exist
 BACKEND_ENV="# Database Configuration
-DATABASE_URL=\"mysql://root:123@localhost:3306/vendr\"
+DATABASE_URL=\"mysql://vendruser:vendr@localhost/vendr?socket=$MYSQL_SOCKET_PATH\"
 
 # Authentication
 JWT_SECRET=\"bj9XzE2KLp8n5fTVAuC7ymRHGd3qP6ZwDsQ4vWxMcJ\"
@@ -92,6 +108,44 @@ TWILIO_PHONE_NUMBER=\"+19207728959\""
 
 # Frontend .env file
 FRONTEND_ENV="VITE_API_URL=https://localhost:3000"
+
+# Setup MySQL database and user
+echo -e "\n\033[0;36mSetting up MySQL database and user...\033[0m"
+# Ask for MySQL root password
+read -s -p "Enter MySQL root password: " MYSQL_ROOT_PASSWORD
+echo
+
+# Create the database and user
+mysql -u root -p"$MYSQL_ROOT_PASSWORD" <<EOF
+CREATE DATABASE IF NOT EXISTS vendr;
+CREATE USER IF NOT EXISTS 'vendruser'@'localhost' IDENTIFIED BY 'vendr';
+CREATE USER IF NOT EXISTS 'vendruser'@'127.0.0.1' IDENTIFIED BY 'vendr';
+
+-- Update authentication method for MySQL 8+ compatibility
+ALTER USER 'vendruser'@'localhost' IDENTIFIED WITH mysql_native_password BY 'vendr';
+ALTER USER 'vendruser'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY 'vendr';
+
+-- Grant necessary privileges
+GRANT ALL PRIVILEGES ON vendr.* TO 'vendruser'@'localhost';
+GRANT ALL PRIVILEGES ON vendr.* TO 'vendruser'@'127.0.0.1';
+
+-- Grant permissions needed for Prisma shadow database
+GRANT CREATE, ALTER, DROP, REFERENCES ON *.* TO 'vendruser'@'localhost';
+GRANT CREATE, ALTER, DROP, REFERENCES ON *.* TO 'vendruser'@'127.0.0.1';
+
+FLUSH PRIVILEGES;
+EOF
+
+if [ $? -eq 0 ]; then
+    echo -e "\033[0;32mMySQL database and user setup completed successfully\033[0m"
+else
+    echo -e "\033[0;31mFailed to setup MySQL database and user. Please check your MySQL credentials.\033[0m"
+    read -p "Continue anyway? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+fi
 
 # Setup Backend
 echo -e "\n\033[0;36mSetting up backend...\033[0m"
@@ -121,9 +175,52 @@ echo -e "\033[0;32mFixed executable permissions for backend binaries\033[0m"
 echo -e "\033[0;36mSetting up Prisma ORM...\033[0m"
 npx prisma generate
 
+# Verify MySQL Connection
+echo -e "\033[0;36mVerifying MySQL connection...\033[0m"
+cat > test-db.js <<EOF
+const mysql = require('mysql2/promise');
+
+async function testConnection() {
+  try {
+    const connection = await mysql.createConnection({
+      user: 'vendruser',
+      password: 'vendr',
+      database: 'vendr',
+      socketPath: '$MYSQL_SOCKET_PATH'
+    });
+    console.log('Connected to MySQL successfully!');
+    await connection.execute('SELECT 1');
+    console.log('Query executed successfully!');
+    await connection.end();
+    return true;
+  } catch (error) {
+    console.error('Error connecting to MySQL:', error);
+    return false;
+  }
+}
+
+testConnection().then(success => {
+  if (!success) {
+    console.error('MySQL connection failed. Please check your MySQL setup.');
+    process.exit(1);
+  }
+});
+EOF
+
+node test-db.js
+if [ $? -ne 0 ]; then
+    echo -e "\033[0;31mMySQL connection test failed. Please check your MySQL setup.\033[0m"
+    read -p "Continue anyway? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+fi
+rm test-db.js
+
 # Run Prisma migrations if they exist
 echo -e "\033[0;36mRunning Prisma migrations...\033[0m"
-npx prisma migrate deploy || echo -e "\033[0;33mNo migrations to run or database not accessible.\033[0m"
+npx prisma migrate dev --name init_database || echo -e "\033[0;33mNo migrations to run or database not accessible.\033[0m"
 
 # Run Prisma seed to create admin user
 echo -e "\033[0;36mCreating admin user...\033[0m"
@@ -162,6 +259,9 @@ if [ ! -d "certificates" ]; then
     if command -v openssl &> /dev/null; then
         echo -e "\033[0;36mGenerating self-signed SSL certificates...\033[0m"
         openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout certificates/key.pem -out certificates/cert.pem -subj "/CN=localhost" 2>/dev/null
+        # Create symlinks for the expected certificate filenames in src/index.ts
+        ln -sf key.pem certificates/private.key
+        ln -sf cert.pem certificates/certificate.crt
         echo -e "\033[0;32mGenerated SSL certificates\033[0m"
     else
         echo -e "\033[0;33mOpenSSL not found. Using npm mkcert to generate certificates...\033[0m"
@@ -169,10 +269,19 @@ if [ ! -d "certificates" ]; then
         mkdir -p certificates
         mv localhost.key certificates/key.pem
         mv localhost.crt certificates/cert.pem
+        # Create symlinks for the expected certificate filenames in src/index.ts
+        ln -sf key.pem certificates/private.key
+        ln -sf cert.pem certificates/certificate.crt
         echo -e "\033[0;32mGenerated SSL certificates using mkcert\033[0m"
     fi
 else
     echo -e "\033[0;32mSSL certificates directory already exists\033[0m"
+    # Ensure the symlinks exist
+    if [ ! -f "certificates/private.key" ] || [ ! -f "certificates/certificate.crt" ]; then
+        ln -sf key.pem certificates/private.key
+        ln -sf cert.pem certificates/certificate.crt
+        echo -e "\033[0;32mCreated certificate symlinks\033[0m"
+    fi
 fi
 
 # Setup Frontend
@@ -239,17 +348,27 @@ echo -e "\033[0;32mVendr setup completed successfully!\033[0m"
 echo -e "\033[0;32m====================================================\033[0m"
 echo -e "\033[0;33mBefore running the application:\033[0m"
 echo -e "\033[0;33m1. Make sure MySQL server is running\033[0m"
-echo -e "\033[0;33m2. Create a database named 'vendr' if it doesn't exist:\033[0m"
-echo -e "\033[0;36m   mysql -u root -p -e \"CREATE DATABASE IF NOT EXISTS vendr;\"\033[0m"
-echo -e "\033[0;33m3. Run the database migrations: cd backend && npx prisma migrate dev\033[0m"
+echo -e "\033[0;36m   sudo service mysql status\033[0m"
+echo -e "\033[0;36m   sudo service mysql start (if not running)\033[0m"
 echo -e "\n\033[0;33mTo start the application:\033[0m"
 echo -e "\033[0;33m1. Start backend: cd backend && npm run dev\033[0m"
 echo -e "\033[0;33m2. Start frontend: cd frontend && npm run dev\033[0m"
 echo -e "\033[0;33m3. Or use the start-servers script in the server_scripts directory\033[0m"
 
 echo -e "\n\033[0;33mTroubleshooting:\033[0m"
-echo -e "\033[0;33mIf you experience permission issues with node_modules binaries (e.g., 'ts-node: Permission denied'), run:\033[0m"
+echo -e "\033[0;33m1. If you experience permission issues with node_modules binaries, run:\033[0m"
 echo -e "\033[0;36m   cd backend && sudo chmod +x node_modules/.bin/*\033[0m"
 echo -e "\033[0;36m   cd frontend && sudo chmod +x node_modules/.bin/*\033[0m"
-echo -e "\033[0;33mOr run the application with sudo (not recommended for production):\033[0m"
-echo -e "\033[0;36m   sudo npm run dev\033[0m"
+echo -e "\033[0;33m2. If you have MySQL connection issues, ensure the MySQL user is properly configured:\033[0m"
+echo -e "\033[0;36m   sudo mysql -u root -p\033[0m"
+echo -e "\033[0;36m   ALTER USER 'vendruser'@'localhost' IDENTIFIED WITH mysql_native_password BY 'vendr';\033[0m"
+echo -e "\033[0;36m   GRANT ALL PRIVILEGES ON vendr.* TO 'vendruser'@'localhost';\033[0m"
+echo -e "\033[0;36m   GRANT CREATE, ALTER, DROP, REFERENCES ON *.* TO 'vendruser'@'localhost';\033[0m"
+echo -e "\033[0;36m   FLUSH PRIVILEGES;\033[0m"
+echo -e "\033[0;33m3. Check if the MySQL service is running:\033[0m"
+echo -e "\033[0;36m   sudo service mysql status\033[0m"
+echo -e "\033[0;36m   sudo service mysql restart\033[0m"
+echo -e "\033[0;33m4. If your backend hangs at server startup, check the certificate file names:\033[0m"
+echo -e "\033[0;36m   cd backend/certificates\033[0m"
+echo -e "\033[0;36m   ls -la\033[0m"
+echo -e "\033[0;36m   # Ensure both private.key and certificate.crt exist or are linked to key.pem and cert.pem\033[0m"
