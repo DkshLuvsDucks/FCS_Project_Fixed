@@ -2,45 +2,45 @@
 
 # Unix Setup Script
 echo -e "\033[0;32m====================================================\033[0m"
-echo -e "\033[0;32m         Vendr - Development Environment Setup      \033[0m"
+echo -e "\033[0;32m     	Vendr - Development Environment Setup  	\033[0m"
 echo -e "\033[0;32m====================================================\033[0m"
 
 # Check if Node.js is installed, if not, try to install it
 if ! command -v node &> /dev/null; then
-    echo -e "\033[0;33mNode.js is not installed. Attempting to install...\033[0m"
+	echo -e "\033[0;33mNode.js is not installed. Attempting to install...\033[0m"
     
-    # Check which package manager is available
-    if command -v apt-get &> /dev/null; then
-        echo -e "\033[0;36mInstalling Node.js using apt...\033[0m"
-        sudo apt-get update
-        sudo apt-get install -y nodejs npm
-    elif command -v dnf &> /dev/null; then
-        echo -e "\033[0;36mInstalling Node.js using dnf...\033[0m"
-        sudo dnf install -y nodejs npm
-    elif command -v yum &> /dev/null; then
-        echo -e "\033[0;36mInstalling Node.js using yum...\033[0m"
-        sudo yum install -y nodejs npm
-    elif command -v brew &> /dev/null; then
-        echo -e "\033[0;36mInstalling Node.js using Homebrew...\033[0m"
-        brew install node
-    else
-        echo -e "\033[0;31mUnable to install Node.js automatically. Please install Node.js (v18+) manually.\033[0m"
-        echo -e "\033[0;31mVisit https://nodejs.org/ to download and install.\033[0m"
-        exit 1
-    fi
+	# Check which package manager is available
+	if command -v apt-get &> /dev/null; then
+    	echo -e "\033[0;36mInstalling Node.js using apt...\033[0m"
+    	sudo apt-get update
+    	sudo apt-get install -y nodejs npm
+	elif command -v dnf &> /dev/null; then
+    	echo -e "\033[0;36mInstalling Node.js using dnf...\033[0m"
+    	sudo dnf install -y nodejs npm
+	elif command -v yum &> /dev/null; then
+    	echo -e "\033[0;36mInstalling Node.js using yum...\033[0m"
+    	sudo yum install -y nodejs npm
+	elif command -v brew &> /dev/null; then
+    	echo -e "\033[0;36mInstalling Node.js using Homebrew...\033[0m"
+    	brew install node
+	else
+    	echo -e "\033[0;31mUnable to install Node.js automatically. Please install Node.js (v18+) manually.\033[0m"
+    	echo -e "\033[0;31mVisit https://nodejs.org/ to download and install.\033[0m"
+    	exit 1
+	fi
     
-    # Verify installation
-    if ! command -v node &> /dev/null; then
-        echo -e "\033[0;31mNode.js installation failed. Please install manually.\033[0m"
-        exit 1
-    fi
+	# Verify installation
+	if ! command -v node &> /dev/null; then
+    	echo -e "\033[0;31mNode.js installation failed. Please install manually.\033[0m"
+    	exit 1
+	fi
 fi
 
 # Check Node.js version
 NODE_VERSION=$(node -v | cut -d "v" -f 2 | cut -d "." -f 1)
 if [ "$NODE_VERSION" -lt 18 ]; then
-    echo -e "\033[0;31mNode.js version is too old (v$NODE_VERSION). Please upgrade to v18 or later.\033[0m"
-    exit 1
+	echo -e "\033[0;31mNode.js version is too old (v$NODE_VERSION). Please upgrade to v18 or later.\033[0m"
+	exit 1
 fi
 
 echo -e "\033[0;32mNode.js $(node -v) is installed\033[0m"
@@ -48,37 +48,250 @@ echo -e "\033[0;32mNPM $(npm -v) is installed\033[0m"
 
 # Check if MySQL is installed
 if ! command -v mysql &> /dev/null; then
-    echo -e "\033[0;31mMySQL is not installed.\033[0m"
-    echo -e "\033[0;33mPlease install MySQL 8.0 or later manually:\033[0m"
-    echo -e "\033[0;36m- Ubuntu/Debian: sudo apt-get install mysql-server\033[0m"
-    echo -e "\033[0;36m- Fedora: sudo dnf install mysql-server\033[0m"
-    echo -e "\033[0;36m- macOS: brew install mysql\033[0m"
-    echo -e "\033[0;33mAfter installation, make sure MySQL service is running.\033[0m"
-    
-    read -p "Continue setup without MySQL? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo -e "\033[0;33mMySQL is not installed. Attempting to install...\033[0m"
+    if command -v apt-get &> /dev/null; then
+        echo -e "\033[0;36mInstalling MySQL using apt...\033[0m"
+        sudo apt-get update
+        sudo apt-get install -y mysql-server
+    elif command -v dnf &> /dev/null; then
+        echo -e "\033[0;36mInstalling MySQL using dnf...\033[0m"
+        sudo dnf install -y mysql-server
+    elif command -v yum &> /dev/null; then
+        echo -e "\033[0;36mInstalling MySQL using yum...\033[0m"
+        sudo yum install -y mysql-server
+    elif command -v brew &> /dev/null; then
+        echo -e "\033[0;36mInstalling MySQL using Homebrew...\033[0m"
+        brew install mysql
+    else
+        echo -e "\033[0;31mUnable to install MySQL automatically. Please install MySQL 8.0 or later manually.\033[0m"
         exit 1
     fi
-else
-    echo -e "\033[0;32mMySQL is installed\033[0m"
+
+    # Start MySQL service
+    if command -v systemctl &> /dev/null; then
+        echo -e "\033[0;36mStarting MySQL service...\033[0m"
+        sudo systemctl start mysql || sudo systemctl start mysqld
+        sudo systemctl enable mysql || sudo systemctl enable mysqld
+    elif command -v brew &> /dev/null; then
+        echo -e "\033[0;36mStarting MySQL service...\033[0m"
+        brew services start mysql
+    else
+        echo -e "\033[0;33mCould not automatically start MySQL service. Please start it manually.\033[0m"
+    fi
+
+    if ! command -v mysql &> /dev/null; then
+        echo -e "\033[0;31mMySQL installation failed. Please install manually.\033[0m"
+        exit 1
+    fi
 fi
+
+echo -e "\033[0;32mMySQL is installed\033[0m"
 
 # Find MySQL socket path
 MYSQL_SOCKET_PATH="/var/run/mysqld/mysqld.sock"
 if [ -e "/var/run/mysqld/mysqld.sock" ]; then
-    MYSQL_SOCKET_PATH="/var/run/mysqld/mysqld.sock"
+	MYSQL_SOCKET_PATH="/var/run/mysqld/mysqld.sock"
 elif [ -e "/tmp/mysql.sock" ]; then
-    MYSQL_SOCKET_PATH="/tmp/mysql.sock"
+	MYSQL_SOCKET_PATH="/tmp/mysql.sock"
 else
-    # Try to find the socket path
-    SOCKET_PATH=$(sudo mysqladmin variables 2>/dev/null | grep "socket" | awk '{print $4}')
-    if [ ! -z "$SOCKET_PATH" ]; then
-        MYSQL_SOCKET_PATH=$SOCKET_PATH
-    fi
+	# Try to find the socket path
+	SOCKET_PATH=$(sudo mysqladmin variables 2>/dev/null | grep "socket" | awk '{print $4}')
+	if [ ! -z "$SOCKET_PATH" ]; then
+    	MYSQL_SOCKET_PATH=$SOCKET_PATH
+	fi
 fi
 
 echo -e "\033[0;32mMySQL socket path: $MYSQL_SOCKET_PATH\033[0m"
+
+# Secure MySQL installation and set root password
+echo -e "\033[0;36mConfiguring MySQL security...\033[0m"
+
+# Add a more robust way to check MySQL access
+check_mysql_password() {
+    local password="$1"
+    if [ -z "$password" ]; then
+        mysql -u root -e "SELECT 1" &>/dev/null
+        return $?
+    else
+        mysql -u root -p"$password" -e "SELECT 1" &>/dev/null
+        return $?
+    fi
+}
+
+# First try with no password (fresh install)
+if check_mysql_password ""; then
+    echo -e "\033[0;32mMySQL root access is available without password.\033[0m"
+    
+    # Prompt user for new root password
+    while true; do
+        read -s -p "Set a new MySQL root password (cannot be empty): " MYSQL_ROOT_PASSWORD
+        echo
+        if [ -z "$MYSQL_ROOT_PASSWORD" ]; then
+            echo -e "\033[0;31mPassword cannot be empty. Please try again.\033[0m"
+            continue
+        fi
+        read -s -p "Confirm MySQL root password: " MYSQL_ROOT_PASSWORD_CONFIRM
+        echo
+        if [ "$MYSQL_ROOT_PASSWORD" = "$MYSQL_ROOT_PASSWORD_CONFIRM" ]; then
+            break
+        else
+            echo -e "\033[0;31mPasswords do not match. Please try again.\033[0m"
+        fi
+    done
+    
+    # Set the new root password
+    echo -e "\033[0;36mSetting MySQL root password...\033[0m"
+    mysql -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD'; FLUSH PRIVILEGES;"
+    
+    # Verify the new password
+    if check_mysql_password "$MYSQL_ROOT_PASSWORD"; then
+        echo -e "\033[0;32mMySQL root password set successfully.\033[0m"
+    else
+        echo -e "\033[0;31mFailed to set MySQL root password. Please check MySQL logs or try again.\033[0m"
+        exit 1
+    fi
+else
+    # Try alternative authentication methods or prompt for existing password
+    echo -e "\033[0;33mMySQL root access requires a password.\033[0m"
+    
+    # Check if socket authentication might work (common on some distributions)
+    if sudo mysql -e "SELECT 1" &>/dev/null; then
+        echo -e "\033[0;32mMySQL root access available via sudo.\033[0m"
+        
+        # Prompt user for new root password
+        while true; do
+            read -s -p "Set a new MySQL root password (cannot be empty): " MYSQL_ROOT_PASSWORD
+            echo
+            if [ -z "$MYSQL_ROOT_PASSWORD" ]; then
+                echo -e "\033[0;31mPassword cannot be empty. Please try again.\033[0m"
+                continue
+            fi
+            read -s -p "Confirm MySQL root password: " MYSQL_ROOT_PASSWORD_CONFIRM
+            echo
+            if [ "$MYSQL_ROOT_PASSWORD" = "$MYSQL_ROOT_PASSWORD_CONFIRM" ]; then
+                break
+            else
+                echo -e "\033[0;31mPasswords do not match. Please try again.\033[0m"
+            fi
+        done
+        
+        # Set the new root password using sudo
+        echo -e "\033[0;36mSetting MySQL root password...\033[0m"
+        sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD'; FLUSH PRIVILEGES;"
+        
+        # Verify the new password
+        if check_mysql_password "$MYSQL_ROOT_PASSWORD"; then
+            echo -e "\033[0;32mMySQL root password set successfully.\033[0m"
+        else
+            echo -e "\033[0;31mFailed to set MySQL root password. Using sudo method for the rest of the script.\033[0m"
+            USING_SUDO=true
+        fi
+    else
+        # MySQL needs a password, but we don't know it - ask at most 3 times
+        echo -e "\033[0;33mPlease enter the existing MySQL root password.\033[0m"
+        MYSQL_ROOT_PASSWORD=""
+        MAX_ATTEMPTS=3
+        for i in $(seq 1 $MAX_ATTEMPTS); do
+            read -s -p "Enter MySQL root password (attempt $i of $MAX_ATTEMPTS): " MYSQL_ROOT_PASSWORD
+            echo
+            if check_mysql_password "$MYSQL_ROOT_PASSWORD"; then
+                echo -e "\033[0;32mMySQL root password accepted.\033[0m"
+                break
+            else
+                echo -e "\033[0;31mIncorrect password.\033[0m"
+                if [ "$i" -eq "$MAX_ATTEMPTS" ]; then
+                    echo -e "\033[0;31mToo many failed attempts. You have these options:\033[0m"
+                    echo -e "\033[0;33m1. Use sudo if available\033[0m"
+                    echo -e "\033[0;33m2. Skip MySQL setup\033[0m"
+                    echo -e "\033[0;33m3. Exit and fix MySQL manually\033[0m"
+                    read -p "Choose an option (1/2/3): " choice
+                    case $choice in
+                        1)
+                            if sudo mysql -e "SELECT 1" &>/dev/null; then
+                                echo -e "\033[0;32mMySQL root access available via sudo.\033[0m"
+                                USING_SUDO=true
+                                MYSQL_ROOT_PASSWORD=""
+                            else
+                                echo -e "\033[0;31mSudo access to MySQL not available. Exiting.\033[0m"
+                                exit 1
+                            fi
+                            ;;
+                        2)
+                            echo -e "\033[0;33mSkipping MySQL setup. The application may not work correctly.\033[0m"
+                            SKIP_MYSQL=true
+                            ;;
+                        *)
+                            echo -e "\033[0;31mExiting. Please fix MySQL access manually.\033[0m"
+                            exit 1
+                            ;;
+                    esac
+                fi
+            fi
+        done
+    fi
+fi
+
+# Skip the database setup if requested
+if [ "${SKIP_MYSQL:-false}" = true ]; then
+    echo -e "\033[0;33mSkipping MySQL database and user setup as requested.\033[0m"
+else
+    # Setup MySQL database and user
+    echo -e "\n\033[0;36mSetting up MySQL database and user...\033[0m"
+    
+    # Create the database and user using the appropriate method (sudo or password)
+    if [ "${USING_SUDO:-false}" = true ]; then
+        sudo mysql <<EOF
+CREATE DATABASE IF NOT EXISTS vendr;
+CREATE USER IF NOT EXISTS 'vendruser'@'localhost' IDENTIFIED BY 'vendr';
+CREATE USER IF NOT EXISTS 'vendruser'@'127.0.0.1' IDENTIFIED BY 'vendr';
+
+-- Update authentication method for MySQL 8+ compatibility
+ALTER USER 'vendruser'@'localhost' IDENTIFIED WITH mysql_native_password BY 'vendr';
+ALTER USER 'vendruser'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY 'vendr';
+
+-- Grant necessary privileges
+GRANT ALL PRIVILEGES ON vendr.* TO 'vendruser'@'localhost';
+GRANT ALL PRIVILEGES ON vendr.* TO 'vendruser'@'127.0.0.1';
+
+-- Grant permissions needed for Prisma shadow database
+GRANT CREATE, ALTER, DROP, REFERENCES ON *.* TO 'vendruser'@'localhost';
+GRANT CREATE, ALTER, DROP, REFERENCES ON *.* TO 'vendruser'@'127.0.0.1';
+
+FLUSH PRIVILEGES;
+EOF
+    else
+        mysql -u root -p"$MYSQL_ROOT_PASSWORD" <<EOF
+CREATE DATABASE IF NOT EXISTS vendr;
+CREATE USER IF NOT EXISTS 'vendruser'@'localhost' IDENTIFIED BY 'vendr';
+CREATE USER IF NOT EXISTS 'vendruser'@'127.0.0.1' IDENTIFIED BY 'vendr';
+
+-- Update authentication method for MySQL 8+ compatibility
+ALTER USER 'vendruser'@'localhost' IDENTIFIED WITH mysql_native_password BY 'vendr';
+ALTER USER 'vendruser'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY 'vendr';
+
+-- Grant necessary privileges
+GRANT ALL PRIVILEGES ON vendr.* TO 'vendruser'@'localhost';
+GRANT ALL PRIVILEGES ON vendr.* TO 'vendruser'@'127.0.0.1';
+
+-- Grant permissions needed for Prisma shadow database
+GRANT CREATE, ALTER, DROP, REFERENCES ON *.* TO 'vendruser'@'localhost';
+GRANT CREATE, ALTER, DROP, REFERENCES ON *.* TO 'vendruser'@'127.0.0.1';
+
+FLUSH PRIVILEGES;
+EOF
+    fi
+    
+    if [ $? -eq 0 ]; then
+        echo -e "\033[0;32mMySQL database and user setup completed successfully\033[0m"
+    else
+        echo -e "\033[0;31mFailed to setup MySQL database and user. Please check your MySQL credentials.\033[0m"
+        read -p "Continue anyway? (y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    fi
+fi
 
 # Create .env file for backend if it doesn't exist
 BACKEND_ENV="# Database Configuration
@@ -109,53 +322,15 @@ TWILIO_PHONE_NUMBER=\"+19207728959\""
 # Frontend .env file
 FRONTEND_ENV="VITE_API_URL=https://localhost:3000"
 
-# Setup MySQL database and user
-echo -e "\n\033[0;36mSetting up MySQL database and user...\033[0m"
-# Ask for MySQL root password
-read -s -p "Enter MySQL root password: " MYSQL_ROOT_PASSWORD
-echo
-
-# Create the database and user
-mysql -u root -p"$MYSQL_ROOT_PASSWORD" <<EOF
-CREATE DATABASE IF NOT EXISTS vendr;
-CREATE USER IF NOT EXISTS 'vendruser'@'localhost' IDENTIFIED BY 'vendr';
-CREATE USER IF NOT EXISTS 'vendruser'@'127.0.0.1' IDENTIFIED BY 'vendr';
-
--- Update authentication method for MySQL 8+ compatibility
-ALTER USER 'vendruser'@'localhost' IDENTIFIED WITH mysql_native_password BY 'vendr';
-ALTER USER 'vendruser'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY 'vendr';
-
--- Grant necessary privileges
-GRANT ALL PRIVILEGES ON vendr.* TO 'vendruser'@'localhost';
-GRANT ALL PRIVILEGES ON vendr.* TO 'vendruser'@'127.0.0.1';
-
--- Grant permissions needed for Prisma shadow database
-GRANT CREATE, ALTER, DROP, REFERENCES ON *.* TO 'vendruser'@'localhost';
-GRANT CREATE, ALTER, DROP, REFERENCES ON *.* TO 'vendruser'@'127.0.0.1';
-
-FLUSH PRIVILEGES;
-EOF
-
-if [ $? -eq 0 ]; then
-    echo -e "\033[0;32mMySQL database and user setup completed successfully\033[0m"
-else
-    echo -e "\033[0;31mFailed to setup MySQL database and user. Please check your MySQL credentials.\033[0m"
-    read -p "Continue anyway? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
-fi
-
 # Setup Backend
 echo -e "\n\033[0;36mSetting up backend...\033[0m"
 cd ../backend || { echo "Backend directory not found"; exit 1; }
 
 if [ ! -f ".env" ]; then
-    echo "$BACKEND_ENV" > .env
-    echo -e "\033[0;32mCreated backend .env file\033[0m"
+	echo "$BACKEND_ENV" > .env
+	echo -e "\033[0;32mCreated backend .env file\033[0m"
 else
-    echo -e "\033[0;32mBackend .env file already exists\033[0m"
+	echo -e "\033[0;32mBackend .env file already exists\033[0m"
 fi
 
 # Install backend dependencies
@@ -182,39 +357,39 @@ const mysql = require('mysql2/promise');
 
 async function testConnection() {
   try {
-    const connection = await mysql.createConnection({
-      user: 'vendruser',
-      password: 'vendr',
-      database: 'vendr',
-      socketPath: '$MYSQL_SOCKET_PATH'
-    });
-    console.log('Connected to MySQL successfully!');
-    await connection.execute('SELECT 1');
-    console.log('Query executed successfully!');
-    await connection.end();
-    return true;
+	const connection = await mysql.createConnection({
+  	user: 'vendruser',
+  	password: 'vendr',
+  	database: 'vendr',
+  	socketPath: '$MYSQL_SOCKET_PATH'
+	});
+	console.log('Connected to MySQL successfully!');
+	await connection.execute('SELECT 1');
+	console.log('Query executed successfully!');
+	await connection.end();
+	return true;
   } catch (error) {
-    console.error('Error connecting to MySQL:', error);
-    return false;
+	console.error('Error connecting to MySQL:', error);
+	return false;
   }
 }
 
 testConnection().then(success => {
   if (!success) {
-    console.error('MySQL connection failed. Please check your MySQL setup.');
-    process.exit(1);
+	console.error('MySQL connection failed. Please check your MySQL setup.');
+	process.exit(1);
   }
 });
 EOF
 
 node test-db.js
 if [ $? -ne 0 ]; then
-    echo -e "\033[0;31mMySQL connection test failed. Please check your MySQL setup.\033[0m"
-    read -p "Continue anyway? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
+	echo -e "\033[0;31mMySQL connection test failed. Please check your MySQL setup.\033[0m"
+	read -p "Continue anyway? (y/n) " -n 1 -r
+	echo
+	if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    	exit 1
+	fi
 fi
 rm test-db.js
 
@@ -231,57 +406,57 @@ echo -e "\033[0;36mCreating required directories...\033[0m"
 
 # Create uploads directory and its subdirectories
 if [ ! -d "uploads" ]; then
-    mkdir -p uploads
-    mkdir -p uploads/profile-pictures
-    mkdir -p uploads/posts
-    mkdir -p uploads/profiles
-    mkdir -p uploads/group-images
-    mkdir -p uploads/media
-    mkdir -p uploads/verification-documents
-    mkdir -p uploads/products
-    echo -e "\033[0;32mCreated uploads directories\033[0m"
+	mkdir -p uploads
+	mkdir -p uploads/profile-pictures
+	mkdir -p uploads/posts
+	mkdir -p uploads/profiles
+	mkdir -p uploads/group-images
+	mkdir -p uploads/media
+	mkdir -p uploads/verification-documents
+	mkdir -p uploads/products
+	echo -e "\033[0;32mCreated uploads directories\033[0m"
 else
-    # Make sure all subdirectories exist
-    mkdir -p uploads/profile-pictures
-    mkdir -p uploads/posts
-    mkdir -p uploads/profiles
-    mkdir -p uploads/group-images
-    mkdir -p uploads/media
-    mkdir -p uploads/verification-documents
-    mkdir -p uploads/products
-    echo -e "\033[0;32mUploads directories already exist\033[0m"
+	# Make sure all subdirectories exist
+	mkdir -p uploads/profile-pictures
+	mkdir -p uploads/posts
+	mkdir -p uploads/profiles
+	mkdir -p uploads/group-images
+	mkdir -p uploads/media
+	mkdir -p uploads/verification-documents
+	mkdir -p uploads/products
+	echo -e "\033[0;32mUploads directories already exist\033[0m"
 fi
 
 # Generate SSL certificates
 if [ ! -d "certificates" ]; then
-    mkdir -p certificates
-    # Check if openssl is installed
-    if command -v openssl &> /dev/null; then
-        echo -e "\033[0;36mGenerating self-signed SSL certificates...\033[0m"
-        openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout certificates/key.pem -out certificates/cert.pem -subj "/CN=localhost" 2>/dev/null
-        # Create symlinks for the expected certificate filenames in src/index.ts
-        ln -sf key.pem certificates/private.key
-        ln -sf cert.pem certificates/certificate.crt
-        echo -e "\033[0;32mGenerated SSL certificates\033[0m"
-    else
-        echo -e "\033[0;33mOpenSSL not found. Using npm mkcert to generate certificates...\033[0m"
-        npx mkcert create localhost
-        mkdir -p certificates
-        mv localhost.key certificates/key.pem
-        mv localhost.crt certificates/cert.pem
-        # Create symlinks for the expected certificate filenames in src/index.ts
-        ln -sf key.pem certificates/private.key
-        ln -sf cert.pem certificates/certificate.crt
-        echo -e "\033[0;32mGenerated SSL certificates using mkcert\033[0m"
-    fi
+	mkdir -p certificates
+	# Check if openssl is installed
+	if command -v openssl &> /dev/null; then
+    	echo -e "\033[0;36mGenerating self-signed SSL certificates...\033[0m"
+    	openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout certificates/key.pem -out certificates/cert.pem -subj "/CN=localhost" 2>/dev/null
+    	# Create symlinks for the expected certificate filenames in src/index.ts
+    	ln -sf key.pem certificates/private.key
+    	ln -sf cert.pem certificates/certificate.crt
+    	echo -e "\033[0;32mGenerated SSL certificates\033[0m"
+	else
+    	echo -e "\033[0;33mOpenSSL not found. Using npm mkcert to generate certificates...\033[0m"
+    	npx mkcert create localhost
+    	mkdir -p certificates
+    	mv localhost.key certificates/key.pem
+    	mv localhost.crt certificates/cert.pem
+    	# Create symlinks for the expected certificate filenames in src/index.ts
+    	ln -sf key.pem certificates/private.key
+    	ln -sf cert.pem certificates/certificate.crt
+    	echo -e "\033[0;32mGenerated SSL certificates using mkcert\033[0m"
+	fi
 else
-    echo -e "\033[0;32mSSL certificates directory already exists\033[0m"
-    # Ensure the symlinks exist
-    if [ ! -f "certificates/private.key" ] || [ ! -f "certificates/certificate.crt" ]; then
-        ln -sf key.pem certificates/private.key
-        ln -sf cert.pem certificates/certificate.crt
-        echo -e "\033[0;32mCreated certificate symlinks\033[0m"
-    fi
+	echo -e "\033[0;32mSSL certificates directory already exists\033[0m"
+	# Ensure the symlinks exist
+	if [ ! -f "certificates/private.key" ] || [ ! -f "certificates/certificate.crt" ]; then
+    	ln -sf key.pem certificates/private.key
+    	ln -sf cert.pem certificates/certificate.crt
+    	echo -e "\033[0;32mCreated certificate symlinks\033[0m"
+	fi
 fi
 
 # Setup Frontend
@@ -290,10 +465,10 @@ cd ../frontend || { echo "Frontend directory not found"; exit 1; }
 
 # Create .env file if it doesn't exist
 if [ ! -f ".env" ]; then
-    echo "$FRONTEND_ENV" > .env
-    echo -e "\033[0;32mCreated frontend .env file\033[0m"
+	echo "$FRONTEND_ENV" > .env
+	echo -e "\033[0;32mCreated frontend .env file\033[0m"
 else
-    echo -e "\033[0;32mFrontend .env file already exists\033[0m"
+	echo -e "\033[0;32mFrontend .env file already exists\033[0m"
 fi
 
 # Install frontend dependencies
@@ -314,30 +489,30 @@ echo -e "\033[0;36mCreating required frontend directories...\033[0m"
 
 # Make sure the ssl/ directory exists
 if [ ! -d "ssl" ]; then
-    mkdir -p ssl
-    echo -e "\033[0;32mCreated frontend ssl directory\033[0m"
+	mkdir -p ssl
+	echo -e "\033[0;32mCreated frontend ssl directory\033[0m"
 else
-    echo -e "\033[0;32mFrontend ssl directory already exists\033[0m"
+	echo -e "\033[0;32mFrontend ssl directory already exists\033[0m"
 fi
 
 # Generate SSL certificates for frontend if not already present
 if [ ! -d "certificates" ]; then
-    mkdir -p certificates
-    # Check if openssl is installed
-    if command -v openssl &> /dev/null; then
-        echo -e "\033[0;36mGenerating self-signed SSL certificates for frontend...\033[0m"
-        openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout certificates/key.pem -out certificates/cert.pem -subj "/CN=localhost" 2>/dev/null
-        echo -e "\033[0;32mGenerated SSL certificates for frontend\033[0m"
-    else
-        echo -e "\033[0;33mOpenSSL not found. Using npm mkcert to generate certificates...\033[0m"
-        npx mkcert create localhost
-        mkdir -p certificates
-        mv localhost.key certificates/key.pem
-        mv localhost.crt certificates/cert.pem
-        echo -e "\033[0;32mGenerated SSL certificates for frontend using mkcert\033[0m"
-    fi
+	mkdir -p certificates
+	# Check if openssl is installed
+	if command -v openssl &> /dev/null; then
+    	echo -e "\033[0;36mGenerating self-signed SSL certificates for frontend...\033[0m"
+    	openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout certificates/key.pem -out certificates/cert.pem -subj "/CN=localhost" 2>/dev/null
+    	echo -e "\033[0;32mGenerated SSL certificates for frontend\033[0m"
+	else
+    	echo -e "\033[0;33mOpenSSL not found. Using npm mkcert to generate certificates...\033[0m"
+    	npx mkcert create localhost
+    	mkdir -p certificates
+    	mv localhost.key certificates/key.pem
+    	mv localhost.crt certificates/cert.pem
+    	echo -e "\033[0;32mGenerated SSL certificates for frontend using mkcert\033[0m"
+	fi
 else
-    echo -e "\033[0;32mFrontend SSL certificates already exist\033[0m"
+	echo -e "\033[0;32mFrontend SSL certificates already exist\033[0m"
 fi
 
 # Return to root directory
